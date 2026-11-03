@@ -1,0 +1,133 @@
+* Dr. D. Y. Patil Institute of Technology (DYP DPU) - TEAM PEGASUS
+* EV Go-Kart 72V 6 kW Powertrain & 12V Safety Interlock SPICE Model
+* Specs: COMPAGE 6 kW PMSM, COMPAGE 350A Controller, 2x 72V 42Ah NMC (84Ah Parallel),
+* 200A DC Contactor, 90A & 150A ANL Fuses, 12V 10Ah Aux, Hall Throttle (0.8-4.2V), RTDS (85-100dB).
+
+.title DYP DPU PEGASUS 6kW EV Go-Kart System
+
+* ==============================================================================
+* 1. 12V AUXILIARY BATTERY (12V 10Ah LFP/NMC)
+* ==============================================================================
+V_AUX 12V_RAW 0 DC 12V
+R_AUX_INT 12V_RAW 12V_BUS 0.015
+
+* ==============================================================================
+* 2. SAFETY INTERLOCK SHUTDOWN CIRCUIT (12V CONTROL LOOP)
+* ==============================================================================
+* Control signals for safety switches:
+V_SW_KILL1_CTRL ctrl_kill1 0 PWL(0 0  0.1 0  0.101 1)
+V_SW_KEY_CTRL   ctrl_key   0 PWL(0 0  0.2 0  0.201 1)
+V_SW_KILL2_CTRL ctrl_kill2 0 PWL(0 1  4.5 1  4.501 0) ; Push-Pull E-Stop hit at 4.5s
+V_SW_TOGGLE_CTRL ctrl_toggle 0 PWL(0 0  0.5 0  0.501 1)
+V_SW_BRAKE_CTRL  ctrl_brake  0 PWL(0 0  1.2 0  1.21 1  1.5 1  1.51 0  3.2 0  3.21 1  3.7 1  3.71 0)
+
+* Kill SW1 (Cockpit Red Mushroom E-Stop, 22.5mm)
+S_KILL1 12V_BUS NODE_KILL1 ctrl_kill1 0 MYSW_NC
+
+* Branch 1: Auxiliary Loads (Brake Light, Strobe, Display)
+* ------------------------------------------------------------------------------
+* Brake Pedal Switch & >=3W LED Brake Light (IP65)
+S_BRAKE NODE_KILL1 NODE_BRAKE_LT ctrl_brake 0 MYSW_NO
+R_BRAKE_LIGHT NODE_BRAKE_LT 0 48.0 ; 12V >=3W LED Brake Lamp (I ~ 0.25A)
+
+* Strobe / Hazard Flashing Indicator (>=3W Amber LED IP65)
+R_STROBE NODE_KILL1 0 48.0 ; 12V >=3W Strobe (I ~ 0.25A)
+
+* Dashboard Display & Digital Temp Unit (20-150 deg C display)
+R_DISP_PWR NODE_KILL1 0 40.0 ; ~3.6W Display consumption
+V_IN1 IN_1 0 PULSE(0 5 0.5 1u 1u 5m 10m) ; Speed pulse input
+V_IN2 IN_2 0 DC 4.28 ; Scaled 72V pack (84V max = 5.0V)
+V_IN3 IN_3 0 DC 1.86 ; Motor temp sensor (56 deg C / 150 deg C * 5V)
+V_IN4 IN_4 0 DC 0.0  ; Fault indicator (5V on fault)
+R_IN1 IN_1 0 100k
+R_IN2 IN_2 0 100k
+R_IN3 IN_3 0 100k
+R_IN4 IN_4 0 100k
+
+* Branch 2: Safety Interlock Series Chain
+* ------------------------------------------------------------------------------
+* Key SW (Metal Body 22.5mm) -> Kill SW2 (Push-Pull E-Stop) -> Toggle SW (12V 10A)
+S_KEY   NODE_KILL1 NODE_KEY   ctrl_key   0 MYSW_NO
+S_KILL2 NODE_KEY   NODE_KILL2 ctrl_kill2 0 MYSW_NC
+S_TOGGLE NODE_KILL2 12V_ARMED ctrl_toggle 0 MYSW_NO
+
+* ==============================================================================
+* 3. 200A ISOLATION CONTACTOR (12V COIL, 100V DC CONTACTS)
+* ==============================================================================
+L_COIL 12V_ARMED NODE_COIL_INT 0.40 Rser=36.0
+V_ISENSE NODE_COIL_INT 0 0V
+D_FLYBACK 0 12V_ARMED D_1N4007
+
+* Contactor Contact trigger (>8V coil threshold)
+B_CONTACTOR_CTRL ctrl_contactor 0 V = (I(V_ISENSE) > 0.20) ? 1.0 : 0.0
+
+* ==============================================================================
+* 4. TIMER MODULE & READY-TO-DRIVE SOUND (RTDS - 85 to 100 dB)
+* ==============================================================================
+B_TIMER_OUT rtds_pwr 0 V = (V(12V_ARMED) > 8.0) * (time >= 0.5) * (time <= 2.5) ? 12.0 : 0.0
+R_RTDS rtds_pwr 0 60.0 ; 12V 2.4W Acoustic Buzzer Sounder
+
+* ==============================================================================
+* 5. HIGH VOLTAGE 72V 84Ah PARALLEL TRACTION PACK (2x 72V 42Ah 3C NMC)
+* ==============================================================================
+* Pack 1 (72V 42Ah, R_int = 0.024 Ohm)
+V_B1 B1_POS_INT 0_HV DC 72V
+R_B1_INT B1_POS_INT B1_POS 0.024
+R_B1_NEG B1_NEG 0_HV 0.001
+
+* Pack 2 (72V 42Ah, R_int = 0.024 Ohm)
+V_B2 B2_POS_INT 0_HV DC 72V
+R_B2_INT B2_POS_INT B2_POS 0.024
+R_B2_NEG B2_NEG 0_HV 0.001
+
+* Parallel Copper Bus Bars with 90A 100V ANL Fuse F1
+R_F1_POS B1_POS B2_POS 0.0012 ; 90A ANL Balance Fuse
+R_F1_NEG B1_NEG B2_NEG 0.0012
+
+* 40 sq. mm (~1 AWG, >200A DC) High Voltage Cables & 150A ANL Main Fuse F2
+R_HV_POS B2_POS HV_BUS_POS 0.00045 ; 40 sq. mm Oxygen-Free Copper Cable
+R_F2 B2_NEG HV_BUS_NEG 0.0008     ; 150A 100V ANL Main Traction Fuse
+
+* HV Chassis Isolation Reference
+R_ISO 0_HV 0 10MEG
+
+* ==============================================================================
+* 6. 200A CONTACTOR CONTACTS (72V SWITCHING)
+* ==============================================================================
+S_MAIN HV_BUS_POS MC_POS ctrl_contactor 0 MYSW_HV
+R_MC_NEG HV_BUS_NEG MC_NEG 0.00045
+
+* ==============================================================================
+* 7. COMPAGE PMSM BTDS CONTROLLER (80V, 133A RATED, 350A PEAK)
+* ==============================================================================
+C_DCLINK MC_POS MC_NEG 1200u IC=0 Rser=0.015
+
+* Hall Effect Foot Throttle (0.8V to 4.2V linear output)
+V_THROTTLE_RAW sig_throttle 0 PWL(0 0.8  2.0 0.8  2.5 4.2  3.2 4.2  3.21 0.8  4.0 0.8  4.3 4.2  4.5 4.2  4.51 0.8)
+R_THROTTLE sig_throttle 0 10k
+
+* Normalized Throttle with Brake Plausibility Cutoff (BPD)
+B_THROTTLE_NORM norm_thr 0 V = (V(ctrl_brake) > 0.5) ? 0.0 : max(0.0, min(1.0, (V(sig_throttle) - 0.8) / 3.4))
+
+* ==============================================================================
+* 8. COMPAGE PMSM 125/5D MOTOR (72V, 6 kW RATED, 61 N*m PEAK)
+* ==============================================================================
+* Dynamic Inverter Load (up to 6 kW rated, ~12 kW peak, clamped at 350A peak controller limit)
+B_MOTOR_LOAD MC_POS MC_NEG I = (V(MC_POS, MC_NEG) > 30) * min(350.0, (12.0 / (V(MC_POS, MC_NEG) + 1m)) + (12000.0 * V(norm_thr) * V(norm_thr) / (V(MC_POS, MC_NEG) + 1m)))
+
+* 3-Phase Stator Windings
+L_U MC_POS U_PHASE 40u
+L_V U_PHASE V_PHASE 40u
+L_W V_PHASE MC_NEG 40u
+
+* ==============================================================================
+* MODELS & SIMULATION DIRECTIVES
+* ==============================================================================
+.model MYSW_NO SW(Ron=0.01 Roff=10MEG Vt=0.5 Vh=0.1)
+.model MYSW_NC SW(Ron=0.01 Roff=10MEG Vt=0.5 Vh=-0.1)
+.model MYSW_HV SW(Ron=0.003 Roff=100MEG Vt=0.5 Vh=0.1)
+.model D_1N4007 D(IS=7.027n RS=0.034 N=1.8 BV=1000 IBV=50u)
+
+.tran 0 100 0 10m UIC
+.backanno
+.end

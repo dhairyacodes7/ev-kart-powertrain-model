@@ -1,0 +1,14 @@
+.DS_Store
+
+# MATLAB and Simulink leftovers
+slprj/
+*.slxc
+*.autosave
+*.err
+*.asv
+*.m~
+
+# LTspice output (the .raw file is about 390 MB)
+*.raw
+*.log
+*.net
